@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ZONOS3-Mini · text to speech in your browser</title>
+  <meta name="description" content="ZONOS3-Mini running on this device's CPU, compiled to WebAssembly with fusor-ai. Your text and your voice clips never leave the page.">
+  <link rel="icon" href="/brand/zonos3-mini.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/base.css">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <App state="{{ App::new() }}">
+    <script type="module" src="./app.js"></script>
+    <main on:engine="state.receive(event)" data-phase="{{ state.phase.get().name() }}">
+      <header class="masthead">
+        <div class="lockup">
+          <img src="/brand/fusor-ai.svg" alt="fusor-ai" width="40" height="40">
+          <span class="times" aria-hidden="true">×</span>
+          <img src="/brand/zonos3-mini.svg" alt="" width="36" height="36">
+          <span class="wordmark">ZONOS3-Mini</span>
+        </div>
+        <h1>Type it and hear it, in one of 27 voices or yours, on your own CPU</h1>
+        <p class="lede">Zyphra's ZONOS3-Mini compiled to WebAssembly with fusor-ai: it speaks as it computes. It reads text in its 43 languages as written: numbers, dates and abbreviations are not expanded (the reference's text normalization is off). Once the model is loaded, neither your text nor your clip leaves the page.</p>
+      </header>
+
+      <If condition="{{ state.phase.get() == Phase::Loading }}">
+        <section class="card loading" aria-live="polite">
+          <div class="row"><strong>Loading the model</strong><span id="detail" class="muted">{{ state.detail.get() }}</span></div>
+          <progress max="1" value="{{ state.fraction.get() }}"></progress>
+        </section>
+      </If>
+
+      <If condition="{{ state.phase.get() == Phase::Broken }}">
+        <section class="card broken" role="alert">
+          <strong>{{ if state.failed_to_load() { "The model could not load" } else { "The engine stopped" } }}</strong>
+          <p id="detail">{{ state.detail.get() }}</p>
+          <If condition="{{ state.failed_to_load() }}">
+            <p class="muted">A bundle loads only into the runtime built with it. If you built this page yourself, rebuild both with <code>just build</code>.</p>
+          </If>
+          <div class="row"><a id="reload" class="control primary" href="">Reload</a></div>
+        </section>
+      </If>
+
+      <section class="card voice-card">
+        <div class="row heading">
+          <strong>Voice</strong>
+          <label class="inline" hidden="{{ state.clones() }}">Speaks from
+            <select id="mode" class="field" bind="state.mode">
+              <option value="reference">its recording</option>
+              <option value="embedding">its speaker embedding</option>
+            </select>
+          </label>
+          <label class="inline" hidden="{{ !state.clones() }}">Clones it by
+            <select id="clip-mode" class="field" bind="state.clip_mode">
+              <option value="codes">its codes (the clip encoder, downloaded once)</option>
+              <option value="embedding">its speaker embedding</option>
+            </select>
+          </label>
+        </div>
+        <div class="voices">
+          <ForEach items="{{ state.voice_choices() }}" key="{{ |voice| voice.id.clone() }}">
+            <button type="button" class="chip" data-voice="{{ item.get().id }}" aria-pressed="{{ state.chosen(&item.get()) }}" on:click="state.choose(item.get())">{{ item.get().label }}</button>
+          </ForEach>
+        </div>
+        <label class="dropzone" for="voice-file">
+          <input id="voice-file" type="file" accept="audio/*">
+          <span><strong>Drop a clip of a voice</strong> or choose a file, to speak in it</span>
+        </label>
+        <div hidden="{{ !state.clones() }}">
+          <canvas id="voice-wave" aria-label="Waveform of the voice clip"></canvas>
+          <p id="clip-note" class="muted">{{ state.clip_note.get() }}</p>
+        </div>
+      </section>
+
+      <section class="card compose">
+        <label for="text">Text</label>
+        <textarea id="text" class="field" rows="3" maxlength="1000" bind="state.text"></textarea>
+
+        <div class="knobs">
+          <ForEach items="{{ state.conditions() }}" key="{{ |condition| condition.name.clone() }}">
+            <label class="knob" data-condition="{{ item.get().name }}">
+              <span class="row"><span>{{ item.get().name.replace('_', " ") }}</span><span class="muted">{{ item.get().label }}</span></span>
+              <input type="range" min="0" max="{{ item.get().unknown }}" step="1" bind="state.slider(&item.get().name)">
+            </label>
+          </ForEach>
+        </div>
+        <label class="knob">
+          <span class="row"><span>speaker guidance</span><span id="guidance-value" class="muted">{{ scale_label(state.guidance.get()) }}</span></span>
+          <input id="guidance" type="range" min="0" max="4" step="0.1" bind="state.guidance">
+        </label>
+
+        <div class="row">
+          <label class="toggle"><input id="laci" type="checkbox" bind="state.laci"> Guard the reading with LACI <span class="muted">(rolls back skipped, stalled or cut words; a short text always runs under it)</span></label>
+          <label class="inline">Language
+            <input id="language" class="field" list="languages" size="6" bind="state.language">
+            <datalist id="languages">
+              <ForEach items="{{ state.languages.get() }}" key="{{ |language| language.clone() }}">
+                <option value="{{ item.get() }}"></option>
+              </ForEach>
+            </datalist>
+          </label>
+        </div>
+
+        <details class="designer">
+          <summary>Voice design <span class="muted">(steering)</span></summary>
+          <div class="voices">
+            <ForEach items="{{ state.preset_names() }}" key="{{ |name| name.clone() }}">
+              <button type="button" class="chip" on:click="state.apply_preset(&item.get())">{{ item.get() }}</button>
+            </ForEach>
+          </div>
+          <button id="design-reset" type="button" class="control" on:click="state.reset_design()">Reset the design</button>
+          <p class="muted" hidden="{{ state.by_embedding() }}">Who, texture, room and accent move the speaker embedding: they need a voice by its embedding.</p>
+          <div class="knobs">
+            <ForEach items="{{ state.knobs.get() }}" key="{{ |knob| knob.id.clone() }}">
+              <label class="knob" data-control="{{ item.get().id }}">
+                <span class="row"><span>{{ item.get().label }}</span><span class="muted">{{ state.level_label(&item.get()) }}</span></span>
+                <input type="range" min="{{ item.get().min }}" max="{{ item.get().max }}" step="0.1" bind="state.level(&item.get().id)" disabled="{{ state.knob_disabled(&item.get()) }}">
+              </label>
+            </ForEach>
+          </div>
+          <label class="knob">
+            <span class="row"><span>controls guidance</span><span class="muted">{{ scale_label(state.controls_guidance.get()) }}</span></span>
+            <input id="controls-guidance" type="range" min="1" max="4" step="0.1" bind="state.controls_guidance">
+          </label>
+        </details>
+
+        <details class="sampler">
+          <summary>Sampling <span class="muted">(the reference's defaults)</span></summary>
+          <div class="knobs">
+            <label class="knob">Seed <input id="seed" class="field" type="number" min="0" step="1" bind="state.seed"></label>
+            <label class="knob">Temperature <input id="temperature" class="field" type="number" min="0" step="0.05" bind="state.temperature"></label>
+            <label class="knob">Top-k <input id="top-k" class="field" type="number" min="0" step="1" bind="state.top_k"></label>
+            <label class="knob">Top-p <input id="top-p" class="field" type="number" min="0" max="1" step="0.01" bind="state.top_p"></label>
+            <label class="knob">Min-p <input id="min-p" class="field" type="number" min="0" max="1" step="0.01" bind="state.min_p"></label>
+            <label class="knob">Repetition penalty <input id="repetition-penalty" class="field" type="number" min="1" step="0.1" bind="state.repetition_penalty"></label>
+            <label class="knob">Repetition window <input id="repetition-window" class="field" type="number" min="0" step="1" bind="state.repetition_window"></label>
+            <label class="knob">Codebooks penalized <input id="repetition-codebooks" class="field" type="number" min="0" max="10" step="1" bind="state.repetition_codebooks"></label>
+          </div>
+        </details>
+
+        <label class="knob">Decoder
+          <select id="decoder" class="field" bind="state.decoder" disabled="{{ !state.can_switch() }}">
+            <option value="keep2_plain">keep2 (163 MB, the reference's default)</option>
+            <option value="full_mr">full multi-resolution (1.1 GB more to download)</option>
+          </select>
+        </label>
+
+        <div class="row">
+          <button id="generate" type="button" class="control primary" disabled="{{ !state.can_generate() }}" on:click="state.generate()">{{ state.generate_label() }}</button>
+          <button id="stop" type="button" class="control" disabled="{{ !state.can_stop() }}" on:click="state.stop()">Stop</button>
+          <span id="status" class="muted" aria-live="polite">{{ state.status.get() }}</span>
+        </div>
+      </section>
+
+      <If condition="{{ state.measured.get() }}">
+        <section class="card live" data-playing="{{ state.playing.get() }}">
+          <canvas id="wave" aria-label="Waveform of the generated speech"></canvas>
+          <dl class="metrics">
+            <div><dt>Load</dt><dd id="load">{{ state.load_time() }}</dd><dd class="muted">{{ state.load_source() }}</dd></div>
+            <div><dt>First audio</dt><dd id="heard">{{ state.metrics.get().heard() }}</dd><dd id="heard-note" class="muted">{{ state.metrics.get().heard_note() }}</dd></div>
+            <div><dt>RTF</dt><dd id="rtf">{{ state.metrics.get().real_time_factor() }}</dd><dd class="muted">{{ state.metrics.get().speedup() }}</dd></div>
+            <div><dt>Network</dt><dd id="requests">{{ state.metrics.get().requests }}</dd><dd class="muted">requests since the model loaded</dd></div>
+          </dl>
+          <p class="muted">{{ state.metrics.get().audio() }}</p>
+          <Match value="{{ state.audio.get() }}">
+            <Case pattern="Some(url)">
+              <div class="row">
+                <audio controls src="{{ url.get() }}"></audio>
+                <a id="download" class="control" download="zonos3-mini.wav" href="{{ url.get() }}">Download WAV</a>
+              </div>
+            </Case>
+            <Case pattern="None"></Case>
+          </Match>
+        </section>
+      </If>
+
+      <footer class="muted">
+        <span id="runtime">{{ state.summary() }}</span>
+        <span>Built with <a href="https://github.com/fusor-rs/fusor-ai">fusor-ai</a> and <a href="https://fusor.build">fusor</a> · <a href="https://huggingface.co/Zyphra/ZONOS3-Mini">model</a> · <a href="https://github.com/fusor-rs/zonos3-mini-wasm">source</a></span>
+      </footer>
+    </main>
+  </App>
+</body>
+</html>

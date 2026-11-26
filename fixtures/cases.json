@@ -1,0 +1,51 @@
+{
+  "reference_en": {
+    "text": "The old lighthouse keeper climbed the stairs every evening to light the lamp.",
+    "language": "en_us",
+    "voice": "English/Rupert_en-British_M_1",
+    "speaker": "codes",
+    "decoder": "keep2_plain",
+    "seed": 7,
+    "max_tokens": 300
+  },
+  "embedding_en": {
+    "text": "Please wait a moment. Then say təmeɪtoʊ slowly.",
+    "language": "en_us",
+    "voice": "English/Willow_en-asrm_F_1",
+    "speaker": "clip",
+    "condition_buckets": {
+      "loudness": 5,
+      "fmax": 7,
+      "speaking_rate": 15
+    },
+    "decoder": "full_mr",
+    "seed": 11,
+    "max_tokens": 300
+  },
+  "cfg_fr": {
+    "text": "Le petit café au coin de la rue ouvre à sept heures.",
+    "language": "fr_fr",
+    "voice": "French/Gaspard_fr_M_1",
+    "speaker": "embedding",
+    "speaker_cfg_scale": 1.5,
+    "decoder": "keep2_plain",
+    "seed": 3,
+    "max_tokens": 300
+  },
+  "steered_en": {
+    "text": "On rainy afternoons we used to sit by the window, counting the boats that came back to the harbour before dark.",
+    "language": "en_us",
+    "voice": "English/Imogen_en-British_F_1",
+    "speaker": "embedding",
+    "controls": {
+      "identity.age": 1.0,
+      "emotions.happy": 1.5,
+      "delivery.tempo": -0.5,
+      "mandarin_hidden.cmn": 0.5
+    },
+    "controls_cfg_scale": 1.5,
+    "decoder": "keep2_plain",
+    "seed": 5,
+    "max_tokens": 300
+  }
+}
